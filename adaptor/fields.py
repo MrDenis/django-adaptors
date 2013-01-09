@@ -131,6 +131,8 @@ class DjangoModelField(Field):
 
     def __init__(self, *args, **kwargs):
         self.pk = kwargs.pop('pk', 'pk')
+        self.create_if_missed = kwargs.pop('create_if_missed', False)
+
         if len(args) < 1:
             raise ValueError("You should provide a Model as the first argument.")
         self.model = args[0]
@@ -143,7 +145,11 @@ class DjangoModelField(Field):
 
     def to_python(self, value):
         try:
-            return self.model.objects.get(**{self.pk: value})
+            if not self.create_if_missed:
+               return self.model.objects.get(**{self.pk: value})
+            else:
+               obj, created = self.model.objects.get_or_create(**{self.pk: value})
+               return obj
         except ObjectDoesNotExist:
             raise exceptions.ForeignKeyFieldError("No match found for %s" % self.model.__name__, self.model.__name__, value)
         except MultipleObjectsReturned:

@@ -43,6 +43,7 @@ class MyDualModel(models.Model):
     text_1 = models.CharField(max_length=10)
     text_2 = models.CharField(max_length=10)   
 
+
 class FirstNameModel(models.Model):
     first_name = models.CharField(max_length=10)
     
@@ -52,3 +53,19 @@ class LastNameModel(models.Model):
 class LastNameModelWithForeign(models.Model):
     foreign = models.ForeignKey(FirstNameModel)
     last_name = models.CharField(max_length=10)
+
+
+class ZipCodeModel(models.Model):
+    code = models.CharField(max_length=5, unique=True)
+
+class CityModel(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+class PersonModelWithForeign(models.Model):
+    first_name = models.CharField(max_length=10)
+    last_name = models.CharField(max_length=10)
+    zip_code = models.ForeignKey(ZipCodeModel)
+    city = models.ForeignKey(CityModel)
+
+
+

@@ -252,6 +252,36 @@ class TestCsvImporter(TestCase):
         test = TestCsvDbForeignFollow.import_data(["%d" % foreign.id])
         self.assertEquals(my_model, test[0].foreign_csv)
 
+
+    def test_create_foreign_if_missed(self):
+
+        class TestCsvCreateIfMissed(CsvModel):
+            first_name = CharField()
+            last_name = CharField()
+            zip_code = DjangoModelField(ZipCodeModel, pk="code")
+            city = DjangoModelField(CityModel, pk="name", create_if_missed=True)
+
+            class Meta:
+                dbModel = PersonModelWithForeign
+                delimiter = ";"
+
+
+        ZipCodeModel.objects.create(code="90001")
+        test_data = ["john;mcclane;90001;ny"]
+        test = TestCsvCreateIfMissed.import_data(test_data)
+
+        self.assertEquals(ZipCodeModel.objects.count(), 1)
+        self.assertEquals(ZipCodeModel.objects.all()[0].code, "90001")
+
+        self.assertEquals(CityModel.objects.count(), 1)
+        self.assertEquals(CityModel.objects.all()[0].name, "ny")
+
+        self.assertEquals(PersonModelWithForeign.objects.count(), 1)
+        self.assertEquals(PersonModelWithForeign.objects.all()[0].first_name, "john")
+        self.assertEquals(PersonModelWithForeign.objects.all()[0].last_name, "mcclane")
+        self.assertEquals(PersonModelWithForeign.objects.all()[0].city.name, "ny")
+
+
     def test_import_from_file_sniffer(self):
         class TestCsvWithHeader(TestCsvModel):
             class Meta:
