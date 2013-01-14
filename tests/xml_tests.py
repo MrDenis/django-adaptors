@@ -1,3 +1,4 @@
+# -*- coding: utf8
 from django.test import TestCase
 from adaptor.fields import *
 from adaptor.model import XMLModel
@@ -12,6 +13,16 @@ class TestXMLImporter(TestCase):
         field = XMLCharField(path="/name", root=None)
         self.assertEquals(field.get_prep_value(xml), "jojo")
  
+    def test_extract_xml_data_unicode(self):
+        xml = u"<danish>større</danish>"
+        field = XMLCharField(path="/danish", root=None)
+        self.assertEquals(field.get_prep_value(xml), u"større")
+
+    def test_extract_xml_path_unicode(self):
+        xml = u"<større>any</større>"
+        field = XMLCharField(path=u"/større", root=None)
+        self.assertEquals(field.get_prep_value(xml), u"any")
+
     def test_extract_xml_data_from_attribute(self):
         xml = "<person name='jojo'>jojotext</person>"
         field = XMLCharField(path="/person", attribute="name", root=None)
@@ -164,18 +175,22 @@ class TestXMLImporter(TestCase):
 
     def test_embed_fields(self):
         class TestInfoXml(XMLModel):
-            root = XMLRootField(path="person/info")
+            root = XMLRootField(path="info")
             age = XMLIntegerField(path="age")
             taille = XMLFloatField(path="taille")
 
         class TestXMLModel(XMLModel):
-            root = XMLRootField(path="list")
-            name = XMLCharField(path="person/name")
+            root = XMLRootField(path="person")
+            name = XMLCharField(path="name")
             info = XMLEmbed(TestInfoXml)
 
-        xmldata = """<data>
+        class TestXMLList(XMLModel):
+            root = XMLRootField(path="list")
+            persons = XMLEmbed(TestXMLModel)
+
+        xmldata ="""<data>
                         <list>
-                            <person>
+                            <person> 
                                 <name>Jojo</name>
                                 <info>
                                     <age>12</age>
@@ -186,11 +201,31 @@ class TestXMLImporter(TestCase):
                                     <taille>1.3</taille>
                                 </info>
                             </person>
-                        </list>
-                     </data>"""
-        test = TestXMLModel.import_data(xmldata)
-        self.assertEquals(test[0].name, "Jojo")
-        self.assertEquals(test[0].info[1].age, 13)
+                       </list>
+                       <list>
+                           <person>
+                               <name>momo</name>
+                               <info>
+                                   <age>21</age>
+                                   <taille>2.1</taille>
+                               </info>
+                               <info>
+                                   <age>31</age>
+                                   <taille>3.1</taille>
+                               </info>
+                            </person>
+                       </list>
+                   </data>"""
+
+
+
+        test = TestXMLList.import_data(xmldata)
+        self.assertEquals(len(test), 2)
+        self.assertEquals(test[0].persons[0].name, "Jojo")
+        self.assertEquals(test[0].persons[0].info[1].age, 13)
+
+        self.assertEquals(test[1].persons[0].name, "momo")
+        self.assertEquals(test[1].persons[0].info[1].age, 31)
 
 
     def test_foreign_field(self):
@@ -238,8 +273,7 @@ class TestXMLImporter(TestCase):
             is_adult = XMLBooleanField(path="adult", is_true=lambda x: x=="yes", null=True, default=False)
 
         xmldata = """<data>
-                        <person>
-                        </person>
+                        <person> </person>
                      </data>"""
         test = TestXMLModel.import_data(xmldata)
         self.assertEquals(test[0].is_adult, False) # Cannot assert False as None is False
@@ -356,3 +390,58 @@ class TestXMLImporter(TestCase):
          test = TestXMLModel.import_data(xmldata)
          jojo = test[0]
          self.assertEquals(jojo.name, "transformed")
+
+    def test_errors(self):
+        class TestXMLModel(XMLModel):
+            root = XMLRootField(path=".")
+            value = XMLIntegerField(path="value")
+
+            class Meta:
+                raise_exception = False
+
+        xmldata_valid = """<person>
+                            <value>12</value>
+                      </person>
+                  """
+        test = TestXMLModel.import_data(xmldata_valid)
+        self.assertEquals(len(test[0].errors), 0)
+
+        xmldata_invalid = """<person>
+                            <value>twelve</value>
+                      </person>
+                  """
+        test = TestXMLModel.import_data(xmldata_invalid)
+        self.assertEquals(len(test[0].errors), 1)
+
+    def test_embed_transformation(self):
+        class TestInfoXml(XMLModel):
+            root = XMLRootField(path="person/info")
+            age = XMLIntegerField(path="age")
+            taille = XMLFloatField(path="taille")
+
+        class TestXMLModel(XMLModel):
+            root = XMLRootField(path="list")
+            name = XMLCharField(path="person/name")
+            info = XMLEmbed(TestInfoXml)
+
+            def transform_info(self, infos):
+                return filter(lambda info: info.age == 12, infos)
+
+        xmldata = """<data>
+                        <list>
+                            <person>
+                                <name>Jojo</name>
+                                <info>
+                                    <age>12</age>
+                                    <taille>1.2</taille>
+                                </info>
+                                <info>
+                                    <age>13</age>
+                                    <taille>1.3</taille>
+                                </info>
+                            </person>
+                        </list>
+                     </data>"""
+        test = TestXMLModel.import_data(xmldata)
+        self.assertEquals(test[0].name, "Jojo")
+        self.assertEquals(len(test[0].info), 1)
